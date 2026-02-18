@@ -1,0 +1,9 @@
+__pycache__/
+*.py[oc]
+.DS_Store
+.venv/
+*.egg-info/
+precompute_umap.py
+data_bonobos_mps3_vs3_cpt.csv
+data_final_playback_online_acoustique1.csv
+Dash_acoustic_map_playback_son_image_dark_3D_final.py
