@@ -34,7 +34,7 @@ color_map_arousal = {'high': '#C33149', 'low': '#A8C256'}
 color_map_playback = {'Yes': '#99e2b4', 'No': '#036666'}
 
 # --- App Setup ---
-app = Dash(__name__)
+app = Dash(__name__, suppress_callback_exceptions=True)
 server = app.server
 
 @server.route('/segments/<path:filename>')
@@ -45,7 +45,7 @@ def serve_audio(filename):
 def serve_image(filename):
     return send_from_directory(IMAGE_DIR, filename)
 
-# --- Custom CSS ---
+# --- Custom HTML/CSS ---
 app.index_string = '''
 <!DOCTYPE html>
 <html>
@@ -56,6 +56,8 @@ app.index_string = '''
         {%css%}
         <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
         <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            html, body { overflow: hidden; height: 100vh; }
             .Select-control {
                 background-color: #2a2a2a !important;
                 border: 1px solid rgba(255,255,255,0.1) !important;
@@ -74,17 +76,11 @@ app.index_string = '''
                 color: #FFFFFF !important;
                 padding: 8px 10px !important;
             }
-            .Select-option:hover {
+            .Select-option:hover, .Select-option.is-focused {
                 background-color: #3a3a3a !important;
-                color: #FFFFFF !important;
             }
             .Select-option.is-selected {
                 background-color: #4a4a4a !important;
-                color: #FFFFFF !important;
-            }
-            .Select-option.is-focused {
-                background-color: #3a3a3a !important;
-                color: #FFFFFF !important;
             }
         </style>
     </head>
@@ -99,179 +95,239 @@ app.index_string = '''
 </html>
 '''
 
-# --- Layout ---
-app.layout = html.Div([
-    # Header
+# --- Home Page ---
+home_page = html.Div([
+    # Full-screen hero with image background
     html.Div([
-        html.H1("Mapping human perception of bonobo vocalizations refines emotional understanding across Hominoids",
-                style={
-                    'textAlign': 'center',
-                    'margin': '0',
-                    'color': '#FFFFFF',
-                    'fontFamily': 'Space Grotesk, Inter, -apple-system, sans-serif',
-                    'fontWeight': '700',
-                    'fontSize': '24px',
-                    'letterSpacing': '0.3px'
-                })
+        # Dark overlay
+        html.Div(style={
+            'position': 'absolute', 'top': 0, 'left': 0, 'right': 0, 'bottom': 0,
+            'background': 'linear-gradient(135deg, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,0.85) 100%)',
+            'zIndex': 1
+        }),
+        # Content centered
+        html.Div([
+            html.P("Interactive Visualization", style={
+                'color': 'rgba(255,255,255,0.5)',
+                'fontSize': '13px',
+                'letterSpacing': '4px',
+                'textTransform': 'uppercase',
+                'marginBottom': '24px',
+                'fontFamily': 'Space Grotesk, sans-serif',
+                'fontWeight': '300'
+            }),
+            html.H1("Mapping human perception of bonobo vocalizations refines emotional understanding across Hominoids", style={
+                'color': '#FFFFFF',
+                'fontFamily': 'Space Grotesk, sans-serif',
+                'fontWeight': '600',
+                'fontSize': 'clamp(22px, 3vw, 38px)',
+                'lineHeight': '1.3',
+                'maxWidth': '800px',
+                'margin': '0 auto 40px auto',
+                'textAlign': 'center'
+            }),
+            html.Div([
+                html.Span(f"{len(vis_data)}", style={'color': '#FFFFFF', 'fontWeight': '600', 'fontSize': '18px'}),
+                html.Span(" vocalizations", style={'color': 'rgba(255,255,255,0.6)', 'fontSize': '14px'}),
+                html.Span("  |  ", style={'color': 'rgba(255,255,255,0.2)', 'fontSize': '14px', 'margin': '0 8px'}),
+                html.Span(f"{vis_data['subject'].nunique()}", style={'color': '#FFFFFF', 'fontWeight': '600', 'fontSize': '18px'}),
+                html.Span(" bonobos", style={'color': 'rgba(255,255,255,0.6)', 'fontSize': '14px'}),
+                html.Span("  |  ", style={'color': 'rgba(255,255,255,0.2)', 'fontSize': '14px', 'margin': '0 8px'}),
+                html.Span(f"{vis_data['context'].nunique()}", style={'color': '#FFFFFF', 'fontWeight': '600', 'fontSize': '18px'}),
+                html.Span(" contexts", style={'color': 'rgba(255,255,255,0.6)', 'fontSize': '14px'}),
+            ], style={'marginBottom': '48px', 'textAlign': 'center'}),
+            html.Button("Explore the Acoustic Space", id='enter-btn', n_clicks=0, style={
+                'padding': '14px 40px',
+                'fontSize': '15px',
+                'fontFamily': 'Space Grotesk, sans-serif',
+                'fontWeight': '500',
+                'color': '#FFFFFF',
+                'backgroundColor': 'transparent',
+                'border': '1px solid rgba(255,255,255,0.4)',
+                'borderRadius': '4px',
+                'cursor': 'pointer',
+                'letterSpacing': '1px',
+                'transition': 'all 0.3s ease',
+                'backdropFilter': 'blur(4px)'
+            })
+        ], style={
+            'position': 'relative', 'zIndex': 2,
+            'display': 'flex', 'flexDirection': 'column', 'alignItems': 'center',
+            'justifyContent': 'center', 'height': '100vh', 'padding': '20px'
+        })
+    ], style={
+        'position': 'relative',
+        'height': '100vh',
+        'backgroundImage': 'url(/assets/bonobo.jpg)',
+        'backgroundSize': 'cover',
+        'backgroundPosition': 'center 30%'
+    })
+], id='home-page')
+
+# --- Visualization Page ---
+viz_page = html.Div([
+    # Compact header bar
+    html.Div([
+        html.Span("Bonobo Acoustic Space", style={
+            'color': '#FFFFFF',
+            'fontFamily': 'Space Grotesk, sans-serif',
+            'fontWeight': '600',
+            'fontSize': '15px',
+            'letterSpacing': '0.5px'
+        }),
+        html.Button("Home", id='home-btn', n_clicks=0, style={
+            'padding': '5px 16px',
+            'fontSize': '12px',
+            'fontFamily': 'Space Grotesk, sans-serif',
+            'fontWeight': '400',
+            'color': 'rgba(255,255,255,0.7)',
+            'backgroundColor': 'transparent',
+            'border': '1px solid rgba(255,255,255,0.2)',
+            'borderRadius': '3px',
+            'cursor': 'pointer',
+            'letterSpacing': '0.5px'
+        })
     ], style={
         'backgroundColor': '#1a1a1a',
-        'padding': '20px',
-        'marginBottom': '20px'
+        'padding': '10px 20px',
+        'display': 'flex', 'justifyContent': 'space-between', 'alignItems': 'center',
+        'borderBottom': '1px solid rgba(255,255,255,0.08)'
     }),
 
+    # Main content
     html.Div([
         # Left panel - Controls
         html.Div([
+            # Audio player + Image viewer
             html.Div([
-                html.H3("Controls", style={
-                    'color': '#FFFFFF',
-                    'marginBottom': 20,
-                    'fontFamily': 'Inter, sans-serif',
-                    'fontWeight': '300',
-                    'fontSize': '18px'
-                }),
-
-                # Audio player + Image viewer
-                html.Div([
-                    html.H4("Audio Player", style={'color': '#FFFFFF', 'marginBottom': 10, 'fontSize': 14, 'fontWeight': '300'}),
-                    html.Audio(id='audio-player', controls=True, style={'width': '100%', 'marginBottom': 10, 'borderRadius': '4px'}),
-                    html.Div(id='audio-info', style={'marginBottom': 25, 'fontSize': 11, 'color': '#888888', 'textAlign': 'center'}),
-
-                    html.H4("Image Viewer", style={'color': '#FFFFFF', 'marginBottom': 10, 'fontSize': 14, 'fontWeight': '300'}),
-                    html.Img(id='image-viewer', style={'width': '100%', 'borderRadius': '4px', 'marginBottom': 10}),
-                    html.Div(id='image-info', style={'marginBottom': 25, 'fontSize': 11, 'color': '#888888', 'textAlign': 'center'})
-                ], style={
-                    'backgroundColor': 'rgba(255,255,255,0.05)',
-                    'padding': '15px',
-                    'borderRadius': '8px',
-                    'marginBottom': '25px',
-                    'border': '1px solid rgba(255,255,255,0.1)'
-                }),
-
-                # Visualization dropdown
-                html.Label("Visualization:", style={
-                    'fontWeight': '300', 'color': '#FFFFFF', 'fontSize': 12,
-                    'marginBottom': 8, 'display': 'block', 'letterSpacing': '0.3px'
-                }),
-                html.Div([
-                    dcc.Dropdown(
-                        id='dimension-dropdown',
-                        options=[{'label': '3D UMAP', 'value': '3d'}],
-                        value='3d',
-                        style={
-                            'backgroundColor': '#2a2a2a', 'borderRadius': '4px',
-                            'border': '1px solid rgba(255,255,255,0.1)', 'color': '#FFFFFF'
-                        }
-                    )
-                ], style={'marginBottom': 25}),
-
-                # Color by dropdown
-                html.Label("Color by:", style={
-                    'fontWeight': '300', 'color': '#FFFFFF', 'fontSize': 12,
-                    'marginBottom': 8, 'display': 'block', 'letterSpacing': '0.3px'
-                }),
-                html.Div([
-                    dcc.Dropdown(
-                        id='color-dropdown',
-                        options=[
-                            {'label': 'Arousal', 'value': 'general_arousal'},
-                            {'label': 'Valence', 'value': 'valence'},
-                            {'label': 'Valence-Arousal', 'value': 'valence_arousal_refined'},
-                            {'label': 'Context Complet', 'value': 'context_complet'},
-                            {'label': 'Is playback?', 'value': 'Playback'},
-                            {'label': 'Age class', 'value': 'age_class'},
-                            {'label': 'Subject', 'value': 'subject'}
-                        ],
-                        value='valence_arousal_refined',
-                        style={
-                            'backgroundColor': '#2a2a2a', 'borderRadius': '4px',
-                            'border': '1px solid rgba(255,255,255,0.1)', 'color': '#FFFFFF'
-                        }
-                    )
-                ], style={'marginBottom': 25}),
-
-                # Category highlight
-                html.Div([
-                    html.Label("Highlight Category:", style={
-                        'fontWeight': '300', 'color': '#FFFFFF', 'fontSize': 12,
-                        'marginBottom': 8, 'display': 'block', 'letterSpacing': '0.3px'
-                    }),
-                    html.Div([
-                        dcc.Dropdown(
-                            id='category-highlight',
-                            options=[],
-                            value='All',
-                            placeholder="Select category to highlight",
-                            style={
-                                'backgroundColor': '#2a2a2a', 'borderRadius': '4px',
-                                'border': '1px solid rgba(255,255,255,0.1)', 'color': '#FFFFFF'
-                            }
-                        )
-                    ])
-                ], id='category-highlight-container', style={'marginBottom': 25, 'display': 'none'}),
-
-                # Point size slider
-                html.Label("Point Size:", style={
-                    'fontWeight': '300', 'color': '#FFFFFF', 'fontSize': 12,
-                    'marginBottom': 8, 'display': 'block', 'letterSpacing': '0.3px'
-                }),
-                dcc.Slider(
-                    id='size-slider', min=1, max=11, step=1, value=3,
-                    marks={i: {'label': str(i), 'style': {'color': 'white'}} for i in range(1, 11, 2)},
-                    tooltip={"placement": "bottom", "always_visible": True}
-                ),
-
-                # Opacity slider
-                html.Label("Opacity:", style={
-                    'fontWeight': '300', 'color': '#FFFFFF', 'fontSize': 12,
-                    'marginTop': 25, 'marginBottom': 8, 'display': 'block', 'letterSpacing': '0.3px'
-                }),
-                dcc.Slider(
-                    id='opacity-slider', min=0.3, max=1.0, step=0.1, value=1.0,
-                    marks={i/10: {'label': f'{i/10:.1f}', 'style': {'color': 'white'}} for i in range(3, 11, 2)},
-                    tooltip={"placement": "bottom", "always_visible": True}
-                ),
-
+                html.H4("Audio Player", style={'color': '#FFFFFF', 'marginBottom': 8, 'fontSize': 12, 'fontWeight': '400', 'letterSpacing': '0.5px'}),
+                html.Audio(id='audio-player', controls=True, style={'width': '100%', 'marginBottom': 6, 'borderRadius': '4px'}),
+                html.Div(id='audio-info', style={'marginBottom': 16, 'fontSize': 10, 'color': '#666', 'textAlign': 'center'}),
+                html.H4("Spider Plot", style={'color': '#FFFFFF', 'marginBottom': 8, 'fontSize': 12, 'fontWeight': '400', 'letterSpacing': '0.5px'}),
+                html.Img(id='image-viewer', style={'width': '100%', 'borderRadius': '4px', 'marginBottom': 6}),
+                html.Div(id='image-info', style={'marginBottom': 12, 'fontSize': 10, 'color': '#666', 'textAlign': 'center'})
             ], style={
-                'backgroundColor': '#1a1a1a', 'padding': '20px',
-                'borderRadius': '8px', 'border': '1px solid rgba(255,255,255,0.1)'
-            })
-        ], style={'width': '22%', 'padding': '10px'}),
+                'backgroundColor': 'rgba(255,255,255,0.03)',
+                'padding': '12px',
+                'borderRadius': '6px',
+                'marginBottom': '16px',
+                'border': '1px solid rgba(255,255,255,0.06)'
+            }),
 
-        # Right panel - 3D Plot
+            # Color by
+            html.Label("Color by", style={
+                'fontWeight': '400', 'color': 'rgba(255,255,255,0.5)', 'fontSize': 11,
+                'marginBottom': 6, 'display': 'block', 'letterSpacing': '1px', 'textTransform': 'uppercase'
+            }),
+            dcc.Dropdown(
+                id='color-dropdown',
+                options=[
+                    {'label': 'Valence-Arousal', 'value': 'valence_arousal_refined'},
+                    {'label': 'Arousal', 'value': 'general_arousal'},
+                    {'label': 'Valence', 'value': 'valence'},
+                    {'label': 'Context', 'value': 'context_complet'},
+                    {'label': 'Playback', 'value': 'Playback'},
+                    {'label': 'Age class', 'value': 'age_class'},
+                    {'label': 'Subject', 'value': 'subject'}
+                ],
+                value='valence_arousal_refined',
+                style={'backgroundColor': '#2a2a2a', 'borderRadius': '4px',
+                       'border': '1px solid rgba(255,255,255,0.1)', 'color': '#FFFFFF',
+                       'marginBottom': 16}
+            ),
+
+            # Category highlight
+            html.Div([
+                html.Label("Highlight", style={
+                    'fontWeight': '400', 'color': 'rgba(255,255,255,0.5)', 'fontSize': 11,
+                    'marginBottom': 6, 'display': 'block', 'letterSpacing': '1px', 'textTransform': 'uppercase'
+                }),
+                dcc.Dropdown(
+                    id='category-highlight',
+                    options=[],
+                    value='All',
+                    style={'backgroundColor': '#2a2a2a', 'borderRadius': '4px',
+                           'border': '1px solid rgba(255,255,255,0.1)', 'color': '#FFFFFF'}
+                )
+            ], id='category-highlight-container', style={'marginBottom': 16, 'display': 'none'}),
+
+            # Point size
+            html.Label("Point size", style={
+                'fontWeight': '400', 'color': 'rgba(255,255,255,0.5)', 'fontSize': 11,
+                'marginBottom': 6, 'display': 'block', 'letterSpacing': '1px', 'textTransform': 'uppercase'
+            }),
+            dcc.Slider(
+                id='size-slider', min=1, max=11, step=1, value=3,
+                marks={i: {'label': str(i), 'style': {'color': '#555', 'fontSize': '10px'}} for i in range(1, 12, 2)},
+                tooltip={"placement": "bottom", "always_visible": False}
+            ),
+
+            # Opacity
+            html.Label("Opacity", style={
+                'fontWeight': '400', 'color': 'rgba(255,255,255,0.5)', 'fontSize': 11,
+                'marginTop': 16, 'marginBottom': 6, 'display': 'block', 'letterSpacing': '1px', 'textTransform': 'uppercase'
+            }),
+            dcc.Slider(
+                id='opacity-slider', min=0.3, max=1.0, step=0.1, value=1.0,
+                marks={i/10: {'label': f'{i/10:.1f}', 'style': {'color': '#555', 'fontSize': '10px'}} for i in range(3, 11, 2)},
+                tooltip={"placement": "bottom", "always_visible": False}
+            ),
+        ], style={
+            'width': '240px', 'minWidth': '240px',
+            'padding': '12px',
+            'backgroundColor': '#111',
+            'overflowY': 'auto',
+            'height': 'calc(100vh - 45px)'
+        }),
+
+        # Right panel - 3D Plot (fills remaining space)
         html.Div([
             dcc.Graph(
                 id='3d-scatter',
-                style={'height': '85vh', 'borderRadius': '8px', 'backgroundColor': '#1a1a1a'}
+                style={'height': 'calc(100vh - 45px)', 'backgroundColor': '#1a1a1a'},
+                config={'displayModeBar': True, 'displaylogo': False}
             )
         ], style={
-            'width': '76%', 'marginLeft': '2%', 'padding': '10px',
-            'backgroundColor': '#1a1a1a', 'borderRadius': '8px',
-            'border': '1px solid rgba(255,255,255,0.1)'
+            'flex': 1,
+            'backgroundColor': '#1a1a1a'
         })
-
     ], style={
-        'display': 'flex', 'marginTop': 10, 'gap': '10px', 'alignItems': 'flex-start'
+        'display': 'flex',
+        'height': 'calc(100vh - 45px)'
     }),
 
-    # Data Summary
-    html.Div([
-        html.H3("Data Summary", style={
-            'color': '#FFFFFF', 'marginBottom': 15,
-            'fontFamily': 'Inter, sans-serif', 'fontWeight': '300', 'fontSize': '16px'
-        }),
-        html.Div(id='data-summary', style={'color': '#FFFFFF'})
-    ], style={
-        'marginTop': 20, 'padding': '20px', 'backgroundColor': '#1a1a1a',
-        'borderRadius': '8px', 'border': '1px solid rgba(255,255,255,0.1)'
-    })
+    # Hidden dummy for dimension dropdown (kept for callback compatibility)
+    dcc.Dropdown(id='dimension-dropdown', value='3d', style={'display': 'none'})
+], id='viz-page', style={'display': 'none'})
+
+
+# --- Main Layout ---
+app.layout = html.Div([
+    home_page,
+    viz_page
 ], style={
-    'backgroundColor': '#0a0a0a', 'minHeight': '100vh',
-    'fontFamily': 'Inter, -apple-system, sans-serif', 'padding': '0 15px 15px 15px'
+    'backgroundColor': '#0a0a0a',
+    'height': '100vh',
+    'overflow': 'hidden',
+    'fontFamily': 'Inter, -apple-system, sans-serif'
 })
 
 
-# --- Callbacks ---
+# --- Navigation Callbacks ---
+@callback(
+    [Output('home-page', 'style'),
+     Output('viz-page', 'style')],
+    [Input('enter-btn', 'n_clicks'),
+     Input('home-btn', 'n_clicks')]
+)
+def navigate(enter_clicks, home_clicks):
+    from dash import ctx
+    if ctx.triggered_id == 'enter-btn' and enter_clicks:
+        return {'display': 'none'}, {'display': 'block'}
+    return {}, {'display': 'none'}
+
+
+# --- Plot Callback ---
 labels_dict = {
     'general_arousal': 'Arousal', 'valence': 'Valence',
     'valence_arousal_refined': 'Valence-Arousal',
@@ -289,29 +345,19 @@ labels_dict = {
     'Infant_Begging_to_mother': 'Infant begging to mother'
 }
 
-CUSTOM_DATA_COLS = [
-    'subject', 'context', 'valence_arousal_refined', 'file',
-    'has_audio', 'has_image', 'context_complet', 'context_general'
-]
-
 
 @callback(
     [Output('3d-scatter', 'figure'),
-     Output('data-summary', 'children'),
      Output('category-highlight-container', 'style'),
      Output('category-highlight', 'options')],
-    [Input('dimension-dropdown', 'value'),
-     Input('color-dropdown', 'value'),
+    [Input('color-dropdown', 'value'),
      Input('size-slider', 'value'),
      Input('opacity-slider', 'value'),
      Input('category-highlight', 'value')]
 )
-def update_plot(dimension, color_by, point_size, opacity, highlight_category):
-    # Build custom_data columns list
-    hover_valence = 'valence_arousal_refined'
-    custom_cols = ['subject', 'context', hover_valence, 'file', 'has_audio', 'has_image', 'context_complet', 'context_general']
+def update_plot(color_by, point_size, opacity, highlight_category):
+    custom_cols = ['subject', 'context', 'valence_arousal_refined', 'file', 'has_audio', 'has_image', 'context_complet', 'context_general']
 
-    # Determine color map
     if color_by == 'valence_arousal_refined':
         cmap = color_map_refined
     elif color_by == 'valence':
@@ -323,10 +369,8 @@ def update_plot(dimension, color_by, point_size, opacity, highlight_category):
     else:
         cmap = None
 
-    # Category orders for valence_arousal_refined
     cat_orders = {'valence_arousal_refined': refined_category_order} if color_by == 'valence_arousal_refined' else None
 
-    # Create 3D scatter plot
     fig = px.scatter_3d(
         vis_data,
         x='UMAP_1', y='UMAP_2', z='UMAP_3',
@@ -335,15 +379,12 @@ def update_plot(dimension, color_by, point_size, opacity, highlight_category):
         category_orders=cat_orders,
         labels=labels_dict,
         hover_name='file',
-        custom_data=custom_cols,
-        title=f"3D Acoustic Feature Space - {labels_dict.get(color_by, color_by.replace('_', ' ').title())}"
+        custom_data=custom_cols
     )
 
-    # Apply category highlighting
-    if highlight_category and highlight_category != 'All' and color_by in ['valence_arousal_refined']:
+    if highlight_category and highlight_category != 'All' and color_by == 'valence_arousal_refined':
         fig.data = [t for t in fig.data if t.name == highlight_category]
 
-    # Update markers and hover
     fig.update_traces(
         marker=dict(size=point_size, opacity=opacity, line=dict(width=0, color='rgba(0,0,0,0)')),
         hovertemplate='<b>%{hovertext}</b><br><br>'
@@ -354,7 +395,6 @@ def update_plot(dimension, color_by, point_size, opacity, highlight_category):
                       '<extra></extra>'
     )
 
-    # 3D layout
     x_range = [vis_data['UMAP_1'].min() - 0.1, vis_data['UMAP_1'].max() + 0.1]
     y_range = [vis_data['UMAP_2'].min() - 0.1, vis_data['UMAP_2'].max() + 0.1]
     z_range = [vis_data['UMAP_3'].min() - 0.1, vis_data['UMAP_3'].max() + 0.1]
@@ -363,77 +403,39 @@ def update_plot(dimension, color_by, point_size, opacity, highlight_category):
         scene=dict(
             xaxis_title="Dimension 1", yaxis_title="Dimension 2", zaxis_title="Dimension 3",
             bgcolor='#1a1a1a',
-            xaxis=dict(backgroundcolor="#1a1a1a", gridcolor="rgba(255,255,255,0.1)",
+            xaxis=dict(backgroundcolor="#1a1a1a", gridcolor="rgba(255,255,255,0.06)",
                        showgrid=True, gridwidth=1,
-                       title_font=dict(color='#FFFFFF', size=12),
-                       tickfont=dict(color='#888888', size=10), range=x_range),
-            yaxis=dict(backgroundcolor="#1a1a1a", gridcolor="rgba(255,255,255,0.1)",
+                       title_font=dict(color='#888', size=11),
+                       tickfont=dict(color='#555', size=9), range=x_range),
+            yaxis=dict(backgroundcolor="#1a1a1a", gridcolor="rgba(255,255,255,0.06)",
                        showgrid=True, gridwidth=1,
-                       title_font=dict(color='#FFFFFF', size=12),
-                       tickfont=dict(color='#888888', size=10), range=y_range),
-            zaxis=dict(backgroundcolor="#1a1a1a", gridcolor="rgba(255,255,255,0.1)",
+                       title_font=dict(color='#888', size=11),
+                       tickfont=dict(color='#555', size=9), range=y_range),
+            zaxis=dict(backgroundcolor="#1a1a1a", gridcolor="rgba(255,255,255,0.06)",
                        showgrid=True, gridwidth=1,
-                       title_font=dict(color='#FFFFFF', size=12),
-                       tickfont=dict(color='#888888', size=10), range=z_range),
+                       title_font=dict(color='#888', size=11),
+                       tickfont=dict(color='#555', size=9), range=z_range),
             camera=dict(eye=dict(x=1.8, y=1.8, z=1.8))
         ),
         paper_bgcolor='#1a1a1a', plot_bgcolor='#1a1a1a',
-        height=800, margin=dict(l=10, r=10, t=40, b=10),
-        title=dict(
-            font=dict(size=16, color='#FFFFFF', family='Inter, sans-serif', weight=300),
-            x=0.5, xanchor='center'
-        ),
+        margin=dict(l=0, r=0, t=0, b=0),
         legend=dict(
-            bgcolor='rgba(26,26,26,0.9)', bordercolor='rgba(255,255,255,0.1)',
-            borderwidth=1, font=dict(size=14, color='#FFFFFF'),
-            itemsizing='constant', itemwidth=50
+            bgcolor='rgba(26,26,26,0.95)', bordercolor='rgba(255,255,255,0.08)',
+            borderwidth=1, font=dict(size=12, color='#CCC'),
+            itemsizing='constant', itemwidth=40
         )
     )
 
-    # Summary stats
-    summary_stats = html.Div([
-        html.Div([
-            html.Div([
-                html.H2(f"{len(vis_data)}", style={'margin': 0, 'color': '#FFFFFF', 'fontSize': 24, 'fontWeight': '300'}),
-                html.P("Total Calls", style={'margin': 0, 'color': '#888888', 'fontSize': 10, 'letterSpacing': '0.5px'})
-            ], style={'textAlign': 'center', 'flex': 1}),
-            html.Div([
-                html.H2(f"{vis_data['has_audio'].sum()}", style={'margin': 0, 'color': '#FFFFFF', 'fontSize': 24, 'fontWeight': '300'}),
-                html.P("Audio Available", style={'margin': 0, 'color': '#888888', 'fontSize': 10, 'letterSpacing': '0.5px'})
-            ], style={'textAlign': 'center', 'flex': 1}),
-            html.Div([
-                html.H2(f"{vis_data['subject'].nunique()}", style={'margin': 0, 'color': '#FFFFFF', 'fontSize': 24, 'fontWeight': '300'}),
-                html.P("Bonobos", style={'margin': 0, 'color': '#888888', 'fontSize': 10, 'letterSpacing': '0.5px'})
-            ], style={'textAlign': 'center', 'flex': 1}),
-            html.Div([
-                html.H2(f"{vis_data['context'].nunique()}", style={'margin': 0, 'color': '#FFFFFF', 'fontSize': 24, 'fontWeight': '300'}),
-                html.P("Contexts", style={'margin': 0, 'color': '#888888', 'fontSize': 10, 'letterSpacing': '0.5px'})
-            ], style={'textAlign': 'center', 'flex': 1})
-        ], style={'display': 'flex', 'justifyContent': 'space-around', 'marginBottom': 15}),
-        html.Hr(style={'border': '1px solid rgba(255,255,255,0.1)', 'margin': '15px 0'}),
-        html.H4("Valence-Arousal Distribution", style={
-            'color': '#FFFFFF', 'fontWeight': '300', 'marginBottom': 10, 'fontSize': 14
-        }),
-        html.Div([
-            html.Div([
-                html.Span(f"{cat.replace('_', ' ').title()}: ", style={'fontWeight': '300', 'color': '#FFFFFF', 'fontSize': 11}),
-                html.Span(f"{vis_data['valence_arousal_refined'].value_counts().get(cat, 0)}", style={'color': '#888888', 'fontSize': 11})
-            ], style={'marginBottom': 5, 'padding': '3px 8px', 'backgroundColor': 'rgba(255,255,255,0.03)', 'borderRadius': '3px'})
-            for cat in refined_category_order if cat in vis_data['valence_arousal_refined'].values
-        ])
-    ])
-
-    # Category highlight options
-    if color_by in ['valence_arousal_refined']:
-        container_style = {'marginBottom': 25, 'display': 'block'}
+    if color_by == 'valence_arousal_refined':
+        container_style = {'marginBottom': 16, 'display': 'block'}
         category_options = [{'label': 'All Categories', 'value': 'All'}] + \
                            [{'label': cat.replace('_', ' ').title(), 'value': cat}
                             for cat in refined_category_order if cat in vis_data['valence_arousal_refined'].values]
     else:
-        container_style = {'marginBottom': 25, 'display': 'none'}
+        container_style = {'marginBottom': 16, 'display': 'none'}
         category_options = []
 
-    return fig, summary_stats, container_style, category_options
+    return fig, container_style, category_options
 
 
 @callback(
@@ -445,7 +447,7 @@ def update_plot(dimension, color_by, point_size, opacity, highlight_category):
 )
 def update_media(clickData):
     if clickData is None:
-        return None, "Click on a data point to play audio", None, "Click on a data point to view image"
+        return None, "Click a point to play audio", None, "Click a point to view spider plot"
 
     point = clickData['points'][0]
     file_name = point['customdata'][3]
@@ -454,18 +456,18 @@ def update_media(clickData):
 
     if has_audio:
         audio_src = f"/segments/{file_name}"
-        audio_text = f"Playing: {file_name}"
+        audio_text = file_name
     else:
         audio_src = None
-        audio_text = f"Audio not found: {file_name}"
+        audio_text = f"No audio: {file_name}"
 
     if has_image:
         image_name = file_name.replace('.wav', '.png')
         image_src = f"/images/{image_name}"
-        image_text = f"Displaying: {image_name}"
+        image_text = image_name
     else:
         image_src = None
-        image_text = f"Image not found: {file_name}"
+        image_text = f"No image: {file_name}"
 
     return audio_src, audio_text, image_src, image_text
 
