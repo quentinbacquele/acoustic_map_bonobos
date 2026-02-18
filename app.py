@@ -443,7 +443,8 @@ def update_plot(color_by, point_size, opacity, highlight_category):
         legend=dict(
             bgcolor='rgba(26,26,26,0.95)', bordercolor='rgba(255,255,255,0.08)',
             borderwidth=1, font=dict(size=12, color='#CCC'),
-            itemsizing='constant', itemwidth=40
+            itemsizing='constant', itemwidth=40,
+            yanchor='middle', y=0.5, xanchor='right', x=0.99
         )
     )
 
