@@ -58,6 +58,7 @@ app.index_string = '''
         <style>
             * { margin: 0; padding: 0; box-sizing: border-box; }
             html, body { overflow: hidden; height: 100vh; }
+            /* Legacy Select classes */
             .Select-control {
                 background-color: #2a2a2a !important;
                 border: 1px solid rgba(255,255,255,0.1) !important;
@@ -81,6 +82,26 @@ app.index_string = '''
             }
             .Select-option.is-selected {
                 background-color: #4a4a4a !important;
+            }
+            /* Modern Dash dropdown classes */
+            .dash-dropdown .Select-control,
+            .VirtualizedSelectFocusedOption {
+                background-color: #2a2a2a !important;
+                color: #FFFFFF !important;
+            }
+            .VirtualizedSelectOption {
+                background-color: #2a2a2a !important;
+                color: #FFFFFF !important;
+            }
+            .VirtualizedSelectFocusedOption {
+                background-color: #3a3a3a !important;
+            }
+            /* Dash 2.x dropdown overrides */
+            .Select.is-open > .Select-control { background-color: #2a2a2a !important; }
+            .Select-menu { background-color: #2a2a2a !important; }
+            .Select--single > .Select-control .Select-value { color: #FFFFFF !important; }
+            .has-value.Select--single > .Select-control .Select-value .Select-value-label {
+                color: #FFFFFF !important;
             }
         </style>
     </head>
